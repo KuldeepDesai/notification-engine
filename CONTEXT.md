@@ -11,12 +11,27 @@ A single piece of communication triggered through Notifier, with a type, content
 _Avoid_: Message, alert, event, campaign
 
 **Notification Type**:
-The category of a notification (e.g. info, task, announcement). Each type determines how the notification is presented to the recipient.
-_Avoid_: Kind, category, template
+The category of a notification (info, task or announcement), chosen by the origin from a fixed set that Notifier owns. Each type determines the notification's appearance, sound, how intrusive it is, which content it allows, and which actions it may carry.
+_Avoid_: Kind, category, template, priority
+
+**Info**:
+A notification type for general information. It has its own look and sound, and it respects the recipient's operating-system do-not-disturb settings.
+
+**Task**:
+A notification type for asking the recipient to do something. It has its own look and sound, and it respects the recipient's operating-system do-not-disturb settings.
+_Avoid_: To-do, request, assignment
+
+**Announcement**:
+The most intrusive notification type, for organisation-wide messages. It has its own look and sound, and it ignores do-not-disturb settings.
+_Avoid_: Broadcast, alert, bulletin
+
+**Body**:
+The main text of a notification, which may use text formatting such as bold, italics and underline but no images or video.
+_Avoid_: Message, content, payload
 
 **Action**:
-A button on a notification that opens a URL when the recipient clicks it. Dismissing is not an action. Notifier does not track anything that happens after the URL opens (e.g. whether a task gets completed).
-_Avoid_: CTA, link, button
+A button on a notification, or a link in its body, that opens a URL when the recipient clicks it. A notification of any type may have none, one or several. An action is identified by its label: the button text or the link text. Dismissing is not an action. Notifier does not track anything that happens after the URL opens (e.g. whether a task gets completed).
+_Avoid_: CTA, button, hyperlink
 
 **Immediate Notification**:
 A notification whose activation time is the moment it is triggered.
@@ -62,7 +77,7 @@ _Avoid_: User (when meaning the addressee), subscriber, target
 ### Delivery
 
 **Origin**:
-The enterprise system that triggered a notification. Any enterprise system can be an origin, and it may address any audience with any notification type. Each origin has its own credential, so Notifier always knows which origin made a request. An origin may be made up of several services that share one credential, and Notifier treats them as a single origin.
+The enterprise system that triggered a notification. Any enterprise system can be an origin, and it may address any audience with any notification type. Each origin has its own credential, so Notifier always knows which origin made a request. Its registered name appears on every notification it triggers, and the origin cannot change it per notification. An origin may be made up of several services that share one credential, and Notifier treats them as a single origin.
 _Avoid_: Sender, source, publisher, client, service
 
 **Agent**:
@@ -82,7 +97,7 @@ The state of a machine whose agent has recently checked in with Notifier. It say
 _Avoid_: Online, active, alive
 
 **Available**:
-The state of a recipient who is logged in to a machine with an unlocked, active screen, which is when the agent can present a notification.
+The state of a recipient who is logged in to a machine with an unlocked, active screen and, for info and task notifications, without do-not-disturb turned on. This is when the agent can present a notification.
 _Avoid_: Active, online, present
 
 **Delivery**:
