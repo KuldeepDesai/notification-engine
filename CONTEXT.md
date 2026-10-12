@@ -7,8 +7,8 @@ Notifier is the organisation's unified notification system. Enterprise systems u
 ### Notifications
 
 **Notification**:
-A single piece of communication triggered through Notifier, with a type, content, an audience, an activation time, and an expiry.
-_Avoid_: Message, alert, event
+A single piece of communication triggered through Notifier, with a type, content, an audience, an activation time, and an expiry. Each notification stands alone. A reminder or follow-up is a separate notification.
+_Avoid_: Message, alert, event, campaign
 
 **Notification Type**:
 The category of a notification (e.g. info, task, announcement). Each type determines how the notification is presented to the recipient.
@@ -35,7 +35,7 @@ How long a notification stays deliverable once it activates (e.g. 60 seconds, 1 
 _Avoid_: TTL, duration, timeout
 
 **Expiry**:
-The moment a notification stops being deliverable: its activation time plus its lifetime. Expiry only prevents new deliveries. A notification already delivered stays on screen until the recipient deals with it.
+The moment a notification stops being deliverable: its activation time plus its lifetime. Expiry only prevents new deliveries. A notification already on screen stays there, and its status can still move forward after expiry, e.g. from Displayed to Delivered to Actioned.
 _Avoid_: Deadline, end time
 
 **Withdraw**:
@@ -56,7 +56,7 @@ A group of users defined in Okta that can be used as part or all of an audience.
 _Avoid_: Team, list, group (unqualified)
 
 **Recipient**:
-One person in the expanded audience of a notification. A recipient's outcome is taken from their deliveries: delivered if any of their machines reached Delivered, otherwise not delivered.
+One person in the expanded audience of a notification. A recipient's outcome is the furthest status reached by any of their deliveries, in the order Actioned, Dismissed, Delivered, Displayed, Received, Queued, Not Delivered.
 _Avoid_: User (when meaning the addressee), subscriber, target
 
 ### Delivery
@@ -89,6 +89,10 @@ _Avoid_: Active, online, present
 One notification going to one recipient on one machine. A recipient with several machines has a separate delivery on each, and people who share a machine each have their own delivery on it.
 _Avoid_: Send, dispatch, message
 
+**Queued**:
+A delivery that has been created but that the agent has not yet picked up.
+_Avoid_: Pending, waiting, created
+
 **Received**:
 The agent has the notification but has not yet presented it.
 
@@ -112,5 +116,19 @@ The recipient clicked one of a delivered notification's actions.
 _Avoid_: Clicked, completed, acted on
 
 **Not Delivered**:
-The final status of a delivery, or the outcome of a recipient, that did not reach Delivered before expiry. It carries a reason where one is known, such as the recipient never being available or having no machine with an agent.
+The final status of a delivery, or the outcome of a recipient, that never reached the screen (Displayed or further) before expiry. It carries a reason where one is known, such as the recipient never being available or having no machine with an agent.
 _Avoid_: Failed, expired, undelivered
+
+### Reporting
+
+**Notification Report**:
+The account of what happened to one notification: overall totals, rates, and timings, together with each recipient's outcome and the status of each of their deliveries. Anyone who presents the notification's identifier may read it. Because statuses can still change after expiry, a report is never permanently final.
+_Avoid_: Campaign report, analytics, stats
+
+**Delivery Rate**:
+The share of a notification's recipients whose outcome is Delivered or further.
+_Avoid_: Reach, open rate
+
+**Action Rate**:
+The share of delivered recipients whose outcome is Actioned.
+_Avoid_: Click-through rate, CTR, engagement rate
