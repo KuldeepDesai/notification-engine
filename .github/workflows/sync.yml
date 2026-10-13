@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: SYNC
 
 # Controls when the workflow will run
 on:
@@ -28,7 +28,7 @@ jobs:
       # Runs a single command using the runners shell
       - name: Push
         env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           git remote add public \
             "https://x-access-token:${TOKEN}@github.com/KuldeepDesai/notification-engine.git"
