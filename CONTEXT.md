@@ -22,7 +22,7 @@ A notification type for asking the recipient to do something. It has its own loo
 _Avoid_: To-do, request, assignment
 
 **Announcement**:
-The most intrusive notification type, for organisation-wide messages. It has its own look and sound, and it ignores do-not-disturb settings.
+The most intrusive notification type, for messages that must interrupt the recipient straight away, such as a major incident. It has its own look and sound, and it ignores do-not-disturb settings.
 _Avoid_: Broadcast, alert, bulletin
 
 **Body**:
