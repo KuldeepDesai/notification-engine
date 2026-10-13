@@ -45,6 +45,14 @@ _Avoid_: Scheduled, queued, pending, draft
 The moment a notification becomes eligible for delivery.
 _Avoid_: Send time, schedule, start time, "active"
 
+**Activated**:
+The state of a notification whose activation time has arrived and whose expiry has not yet passed. It is deliverable during this period.
+_Avoid_: Active, live, sent
+
+**Past Expiry**:
+The state of an activated notification after its expiry. It gets no new deliveries, but notifications already on screen can still change status.
+_Avoid_: Expired, closed, finished
+
 **Lifetime**:
 How long a notification stays deliverable once it activates (e.g. 60 seconds, 1 day), set by the origin for each notification.
 _Avoid_: TTL, duration, timeout
@@ -120,7 +128,7 @@ The agent has put the notification on the recipient's screen and it has taken fo
 _Avoid_: Sent, shown, seen
 
 **Open**:
-A delivered notification that is still on screen because the recipient has neither dismissed it nor clicked an action. Whenever an open notification leaves the screen without the recipient's doing (for example a restart or a logout), the agent shows it again, up until its expiry. Showing them again does not change their status and is not recorded.
+A delivered notification that is still on screen because the recipient has neither dismissed it nor clicked an action. Whenever an open notification leaves the screen without the recipient's doing (for example a restart or a logout), the agent shows it again, up until its expiry. Showing it again is not recorded, but if a displayed notification takes focus when shown again, it becomes delivered.
 _Avoid_: Active, pending, unread
 
 **Dismissed**:
