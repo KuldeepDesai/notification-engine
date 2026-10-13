@@ -21,16 +21,29 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       # Runs a single command using the runners shell
       - name: Push
         env:
           TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          git remote add public \
-            "https://x-access-token:${TOKEN}@github.com/KuldeepDesai/notification-engine.git"
+          set -euo pipefail
 
-          git push public HEAD:main
+          if [ -z "$TOKEN" ]; then
+            echo "Error: TOKEN is missing"
+            exit 1
+          fi
+
+          git config --local --unset-all \
+            http.https://github.com/.extraheader || true
+          
+          git -c credentail.helpers= \
+            -c http.https://github.com/.extraheader= \
+            push \
+            "https://x-access-token:${TOKEN}@github.com/KuldeepDesai/notification-engine.git" \
+            HEAD:refs/heads/main
