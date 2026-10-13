@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · Notifier delivery model</title>
+<style>
+  :root { --accent:#2f6fed; --ink:#1d2330; --muted:#6b7385; --line:#e3e6ec; --bg:#f7f8fa; --card:#fff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+  header { padding:24px 32px 8px; max-width:1500px; margin:0 auto; }
+  header h1 { margin:0 0 4px; font-size:22px; }
+  .tag { display:inline-block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); border:1px solid var(--accent); border-radius:4px; padding:1px 6px; margin-bottom:8px; }
+  .question { max-width:900px; color:var(--muted); }
+  main { display:grid; grid-template-columns: 400px 1fr; gap:24px; padding:16px 32px 48px; max-width:1500px; margin:0 auto; align-items:start; }
+  #controls { position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:20px 0 8px; }
+  h2:first-child { margin-top:0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin-bottom:12px; }
+  button { font:inherit; font-size:13px; padding:4px 10px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; color:var(--ink); margin:2px 4px 2px 0; }
+  button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.primary:hover:not(:disabled) { color:#fff; opacity:.9; }
+  button:disabled { opacity:.4; cursor:default; }
+  .tabs { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
+  .tabs button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .steps { list-style:none; padding:0; margin:10px 0 0; }
+  .steps li { margin:4px 0; }
+  .steps button { width:100%; text-align:left; }
+  .steps .done button { color:var(--muted); text-decoration:line-through; }
+  .steps .next button { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 2px; }
+  input[type=text], input[type=number], select { width:100%; font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .row { display:flex; gap:8px; } .row > div { flex:1; }
+  .checks label { display:inline-flex; align-items:center; gap:4px; margin-right:10px; color:var(--ink); font-size:13px; }
+  .changed { border-left:3px solid var(--accent); }
+  .changed ul { margin:4px 0 0; padding-left:18px; }
+  .rejected { color:#a33; font-weight:600; }
+  .clock { font-size:20px; font-weight:600; }
+  .machines { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:12px; }
+  .machine h3, .notif h3 { margin:0 0 6px; font-size:15px; }
+  .facts { color:var(--muted); font-size:12px; margin-bottom:6px; }
+  .facts b { color:var(--ink); font-weight:600; }
+  .window { border:1px solid var(--accent); border-radius:6px; padding:8px 10px; margin:8px 0; background:#f4f7ff; }
+  .window .t { font-weight:600; }
+  .window .o { font-size:12px; color:var(--muted); }
+  .screen-empty { color:var(--muted); font-size:12px; font-style:italic; margin:6px 0; }
+  table { border-collapse:collapse; width:100%; margin-top:8px; font-size:13px; }
+  th, td { text-align:left; padding:5px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600; }
+  .status { font-weight:600; }
+  .reason { color:var(--muted); font-size:12px; }
+  .metrics { display:flex; flex-wrap:wrap; gap:18px; margin:6px 0; }
+  .metric .v { font-size:18px; font-weight:600; } .metric .k { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .log { font-size:12px; color:var(--muted); max-height:260px; overflow:auto; }
+  .log div { padding:2px 0; border-bottom:1px dashed var(--line); }
+  .pill { display:inline-block; font-size:11px; padding:0 6px; border-radius:10px; border:1px solid var(--line); color:var(--muted); margin-left:4px; }
+  .groups span.member { margin-right:8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Prototype · throwaway</div>
+  <h1>Notifier: delivery state model</h1>
+  <p class="question">
+    <b>The question:</b> do the rules we agreed in <code>CONTEXT.md</code> still hold up when you push real cases through them?
+    Those rules are: the audience is expanded at activation; there is one delivery per recipient per linked machine;
+    a delivery moves Queued → Received → Displayed/Delivered → Dismissed/Actioned;
+    expiry stops new deliveries but not things already on screen; open notifications come back after a restart until expiry;
+    info and task respect do-not-disturb while announcements ignore it; staged notifications can be withdrawn by anyone holding the identifier;
+    and a recipient's outcome is the furthest stage reached on any of their machines.
+    Run a walkthrough on the left or try things freely. Every change shows up on the right.
+  </p>
+</header>
+<main>
+  <section id="controls">
+    <h2>Guided walkthroughs</h2>
+    <div class="card" id="walk"></div>
+
+    <h2>Free play</h2>
+    <div class="card">
+      <div><b>Clock</b></div>
+      <button data-clock="1">+1 min</button><button data-clock="10">+10 min</button><button data-clock="60">+1 hour</button><button data-clock="1440">+1 day</button>
+    </div>
+    <div class="card" id="form">
+      <div><b>Trigger a notification</b></div>
+      <div class="row">
+        <div><label>Origin</label><select id="f-origin"></select></div>
+        <div><label>Type</label><select id="f-type"><option value="info">Info</option><option value="task">Task</option><option value="announcement">Announcement</option></select></div>
+      </div>
+      <label>Title</label><input id="f-title" type="text" value="Multiple incidents reported for Payments">
+      <label>Actions (comma separated, may be empty)</label><input id="f-actions" type="text" value="Open incident">
+      <label>Audience: users</label><div class="checks" id="f-users"></div>
+      <label>Audience: Okta groups</label><div class="checks" id="f-groups"></div>
+      <div class="row">
+        <div><label>Activates in (minutes, 0 = immediate)</label><input id="f-delay" type="number" min="0" value="0"></div>
+        <div><label>Lifetime (minutes)</label><input id="f-life" type="number" min="1" value="60"></div>
+      </div>
+      <div style="margin-top:10px"><button class="primary" id="f-go">Trigger</button></div>
+    </div>
+    <div class="card">
+      <label style="margin-top:0">Origin used for Withdraw buttons</label><select id="w-origin"></select>
+      <div style="margin-top:10px"><button id="reset">Reset everything</button></div>
+    </div>
+  </section>
+  <section id="state"></section>
+</main>
+
+<!-- ============================================================
+     MODEL: pure, no DOM. This is the part worth keeping.
+     ============================================================ -->
+<script>
+const Model = (() => {
+  const RANK = ['Not Delivered', 'Queued', 'Received', 'Displayed', 'Delivered', 'Dismissed', 'Actioned'];
+  const rank = (st) => RANK.indexOf(st);
+  const OPEN = ['Displayed', 'Delivered'];
+
+  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const fmtTime = (m) => `${DAYS[Math.floor(m / 1440) % 7]} ${String(Math.floor(m % 1440 / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const fmtDur = (m) => m % 1440 === 0 ? `${m / 1440} day${m === 1440 ? '' : 's'}` : m % 60 === 0 ? `${m / 60} h` : `${m} min`;
+
+  function initialState() {
+    const machine = (os, powered, user) => ({ os, powered, network: true, user, locked: false, dnd: false, focusRefused: false });
+    return {
+      now: 9 * 60,
+      people: { mary: 'Mary', john: 'John', jane: 'Jane', peter: 'Peter' },
+      groups: { 'support-all': ['mary', 'john', 'jane'], 'bu-focused': ['mary', 'john'], 'vendor-focused': ['peter'] },
+      machines: {
+        'MAC-MARY': machine('Mac', true, 'mary'),
+        'WIN-MARY': machine('Windows', false, null),
+        'MAC-JOHN': machine('Mac', true, 'john'),
+        'WIN-SHARED': machine('Windows', true, 'peter'),
+      },
+      links: [['mary', 'MAC-MARY'], ['mary', 'WIN-MARY'], ['john', 'MAC-JOHN'], ['john', 'WIN-SHARED'], ['peter', 'WIN-SHARED']],
+      origins: ['Incident Manager', 'Service Desk', 'Learning Portal', 'Workflow Engine'],
+      notifications: [],
+      nextId: 1,
+      log: [],
+      changes: [],
+      rejected: null,
+    };
+  }
+
+  const isConnected = (m) => m.powered && m.network;
+  const isAvailable = (s, machineId, person, ntype) => {
+    const m = s.machines[machineId];
+    return m.powered && m.user === person && !m.locked && (ntype === 'announcement' || !m.dnd);
+  };
+  const expiryOf = (n) => n.activationAt + n.lifetime;
+  const isExpired = (s, n) => s.now >= expiryOf(n);
+  const phase = (s, n) => n.withdrawnAt != null ? 'Withdrawn' : n.activatedAt == null ? 'Staged' : isExpired(s, n) ? 'Past expiry' : 'Activated';
+  const findDelivery = (s, nid, machine, person) => {
+    const n = s.notifications.find((x) => x.id === nid);
+    return n ? { n, d: n.deliveries.find((d) => d.machine === machine && d.person === person) } : {};
+  };
+  const setStatus = (s, d, st) => { d.status = st; d.history.push({ at: s.now, status: st }); };
+
+  function recipientOutcome(n, person) {
+    const ds = n.deliveries.filter((d) => d.person === person);
+    if (!ds.length) return { status: 'Not Delivered', reason: 'No machine with an agent' };
+    const best = ds.reduce((a, d) => rank(d.status) > rank(a.status) ? d : a);
+    if (best.status === 'Not Delivered') return { status: 'Not Delivered', reason: [...new Set(ds.map((d) => d.reason))].join('; ') };
+    return { status: best.status, reason: null };
+  }
+
+  function report(s, n) {
+    const recipients = n.recipients.map((p) => ({ person: p, ...recipientOutcome(n, p) }));
+    const counts = Object.fromEntries(RANK.map((r) => [r, recipients.filter((x) => x.status === r).length]));
+    const delivered = recipients.filter((r) => rank(r.status) >= rank('Delivered')).length;
+    const actioned = counts['Actioned'];
+    const clicks = {};
+    n.deliveries.forEach((d) => { if (d.actionLabel) clicks[d.actionLabel] = (clicks[d.actionLabel] || 0) + 1; });
+    return {
+      recipients, counts, clicks,
+      deliveryRate: recipients.length ? delivered / recipients.length : null,
+      actionRate: delivered ? actioned / delivered : null,
+      mayStillChange: n.activatedAt != null && n.withdrawnAt == null && (!isExpired(s, n) || n.deliveries.some((d) => d.onScreen)),
+    };
+  }
+
+  function activate(s, n, note) {
+    n.activatedAt = s.now;
+    const set = new Set(n.audience.users);
+    n.audience.groups.forEach((g) => (s.groups[g] || []).forEach((p) => set.add(p)));
+    n.recipients = [...set];
+    n.deliveries = [];
+    for (const p of n.recipients) {
+      for (const [lp, m] of s.links) {
+        if (lp === p) n.deliveries.push({ person: p, machine: m, status: 'Queued', reason: null, onScreen: false, actionLabel: null, history: [{ at: s.now, status: 'Queued' }] });
+      }
+    }
+    note(`${n.id} activated. Audience expanded now to: ${n.recipients.map((p) => s.people[p]).join(', ') || 'nobody'}. ${n.deliveries.length} deliveries created (one per recipient per linked machine).`);
+    const none = n.recipients.filter((p) => !n.deliveries.some((d) => d.person === p));
+    if (none.length) note(`${none.map((p) => s.people[p]).join(', ')}: no linked machine, so Not Delivered (no machine with an agent).`);
+  }
+
+  function hide(s, machine, person, why, note) {
+    for (const n of s.notifications) for (const d of n.deliveries) {
+      if (d.machine === machine && (!person || d.person === person) && d.onScreen) {
+        d.onScreen = false;
+        note(`${n.id} left ${s.people[d.person]}'s screen on ${machine} (${why}). It is still open.`);
+      }
+    }
+  }
+
+  function settle(s, note) {
+    for (const n of s.notifications) {
+      if (n.withdrawnAt != null) continue;
+      if (n.activatedAt == null) { if (s.now >= n.activationAt) activate(s, n, note); else continue; }
+      const expired = isExpired(s, n);
+      if (expired && !n.expiryNoted) { n.expiryNoted = true; note(`${n.id} reached its expiry (${fmtTime(expiryOf(n))}). No new deliveries from now on.`); }
+      for (const d of n.deliveries) {
+        const m = s.machines[d.machine];
+        const who = `${s.people[d.person]} on ${d.machine}`;
+        if (d.status === 'Queued') {
+          if (expired) { setStatus(s, d, 'Not Delivered'); d.reason = 'Machine was not connected before expiry'; note(`${n.id} → ${who}: Not Delivered (machine was not connected).`); }
+          else if (isConnected(m)) { setStatus(s, d, 'Received'); note(`${n.id} → ${who}: Received by the agent.`); }
+        }
+        if (d.status === 'Received') {
+          if (expired) { setStatus(s, d, 'Not Delivered'); d.reason = 'Recipient was not available on this machine before expiry'; note(`${n.id} → ${who}: Not Delivered (recipient never available there).`); }
+          else if (isAvailable(s, d.machine, d.person, n.ntype)) {
+            d.onScreen = true;
+            setStatus(s, d, m.focusRefused ? 'Displayed' : 'Delivered');
+            note(m.focusRefused ? `${n.id} → ${who}: on screen, but the OS refused focus, so Displayed.` : `${n.id} → ${who}: on screen with focus, so Delivered.`);
+          }
+        } else if (OPEN.includes(d.status) && !d.onScreen && !expired && isAvailable(s, d.machine, d.person, n.ntype)) {
+          d.onScreen = true;
+          if (d.status === 'Displayed' && !m.focusRefused) { setStatus(s, d, 'Delivered'); note(`${n.id} shown again to ${who} and this time took focus: Displayed → Delivered.`); }
+          else note(`${n.id} shown again to ${who}. The re-show itself is not recorded.`);
+        }
+      }
+    }
+  }
+
+  function reduce(prev, a) {
+    const s = structuredClone(prev);
+    s.changes = []; s.rejected = null;
+    const note = (msg) => { s.changes.push(msg); s.log.push({ at: s.now, msg }); };
+    const reject = (msg) => { s.rejected = msg; s.log.push({ at: s.now, msg: `Rejected: ${msg}` }); };
+    const m = a.machine ? s.machines[a.machine] : null;
+
+    switch (a.type) {
+      case 'advance':
+        note(`Clock moves forward ${fmtDur(a.minutes)}.`);
+        for (let i = 0; i < a.minutes; i++) { s.now++; settle(s, note); }
+        return s;
+
+      case 'trigger': {
+        if (!a.users.length && !a.groups.length) { reject('An audience needs at least one user or Okta group.'); break; }
+        if (!(a.lifetime > 0)) { reject('Lifetime must be more than zero.'); break; }
+        const id = `N${s.nextId++}`;
+        s.notifications.push({
+          id, origin: a.origin, ntype: a.ntype, title: a.title, actions: a.actions.filter(Boolean),
+          audience: { users: [...a.users], groups: [...a.groups] },
+          triggeredAt: s.now, activationAt: s.now + (a.delay || 0), lifetime: a.lifetime,
+          activatedAt: null, withdrawnAt: null, withdrawnBy: null, recipients: [], deliveries: [], expiryNoted: false,
+        });
+        note(`${a.origin} triggered ${id}: ${a.ntype} "${a.title}". ${a.delay ? `Staged, activates ${fmtTime(s.now + a.delay)}.` : 'Immediate.'} Lifetime ${fmtDur(a.lifetime)}.`);
+        break;
+      }
+
+      case 'withdraw': {
+        const n = s.notifications.find((x) => x.id === a.id);
+        if (n.withdrawnAt != null) { reject(`${n.id} is already withdrawn.`); break; }
+        if (n.activatedAt != null) { reject(`${n.id} has already activated. Only a staged notification can be withdrawn.`); break; }
+        n.withdrawnAt = s.now; n.withdrawnBy = a.origin;
+        note(`${a.origin} withdrew ${n.id} (triggered by ${n.origin}) using its identifier. It will never go out.`);
+        break;
+      }
+
+      case 'power':
+        if (a.on) { m.powered = true; m.user = null; note(`${a.machine} switched on. Nobody logged in yet.`); }
+        else { hide(s, a.machine, null, 'switched off', note); m.powered = false; m.user = null; note(`${a.machine} switched off.`); }
+        break;
+      case 'restart':
+        hide(s, a.machine, null, 'restart', note); m.user = null; m.powered = true;
+        note(`${a.machine} restarted. Back at the login screen.`);
+        break;
+      case 'network':
+        m.network = a.on; note(`${a.machine} network ${a.on ? 'back' : 'lost'}.`);
+        break;
+      case 'login': {
+        if (!m.powered) { reject(`${a.machine} is switched off.`); break; }
+        if (m.user && m.user !== a.person) hide(s, a.machine, m.user, `${s.people[m.user]} logged out`, note);
+        m.user = a.person; m.locked = false;
+        note(`${s.people[a.person]} logged in on ${a.machine}.`);
+        if (!s.links.some(([p, mm]) => p === a.person && mm === a.machine)) {
+          s.links.push([a.person, a.machine]);
+          note(`Link created: ${s.people[a.person]} ↔ ${a.machine}. Only notifications that activate from now on will get a delivery here.`);
+        }
+        break;
+      }
+      case 'logout':
+        if (!m.user) { reject(`Nobody is logged in on ${a.machine}.`); break; }
+        hide(s, a.machine, m.user, 'logout', note); note(`${s.people[m.user]} logged out of ${a.machine}.`); m.user = null;
+        break;
+      case 'lock': m.locked = a.on; note(`${a.machine} screen ${a.on ? 'locked' : 'unlocked'}.`); break;
+      case 'dnd': m.dnd = a.on; note(`${a.machine} do-not-disturb ${a.on ? 'on' : 'off'}.`); break;
+      case 'focus': m.focusRefused = a.on; note(`${a.machine}: OS ${a.on ? 'now refuses' : 'now allows'} focus for new windows.`); break;
+
+      case 'click': case 'dismiss': case 'act': {
+        const { n, d } = findDelivery(s, a.id, a.machine, a.person);
+        if (!d || !d.onScreen) { reject('That notification is not on that screen.'); break; }
+        const who = `${s.people[d.person]} on ${d.machine}`;
+        const late = isExpired(s, n) ? ' (after expiry)' : '';
+        if (d.status === 'Displayed') { setStatus(s, d, 'Delivered'); note(`${who} clicked into ${n.id}${late}: Displayed → Delivered.`); }
+        if (a.type === 'dismiss') { setStatus(s, d, 'Dismissed'); d.onScreen = false; note(`${who} dismissed ${n.id}${late}.`); }
+        if (a.type === 'act') { setStatus(s, d, 'Actioned'); d.actionLabel = a.label; d.onScreen = false; note(`${who} clicked "${a.label}" on ${n.id}${late}: the URL opens. Actioned.`); }
+        break;
+      }
+
+      case 'join':
+        if (!s.groups[a.group].includes(a.person)) { s.groups[a.group].push(a.person); note(`${s.people[a.person]} joined ${a.group}.`); }
+        break;
+      case 'leave':
+        s.groups[a.group] = s.groups[a.group].filter((p) => p !== a.person); note(`${s.people[a.person]} left ${a.group}.`);
+        break;
+    }
+    settle(s, note);
+    return s;
+  }
+
+  return { initialState, reduce, report, recipientOutcome, phase, expiryOf, isConnected, fmtTime, fmtDur, RANK };
+})();
+</script>
+
+<!-- ============================================================
+     PAGE: throwaway shell over the model.
+     ============================================================ -->
+<script>
+const T = (o) => ({ type: 'trigger', origin: 'Incident Manager', ntype: 'announcement', title: 'Untitled', actions: [], users: [], groups: [], delay: 0, lifetime: 1440, ...o });
+const SCENARIOS = [
+  {
+    name: 'Two machines',
+    desc: 'Mary has a Mac (on, logged in) and a Windows laptop (switched off). An announcement goes to Mary, who dismisses it on the Mac and later clicks its action on Windows. <b>Watch</b> the two deliveries diverge, and Mary\'s recipient outcome end up as <b>Actioned</b> because the furthest stage on any machine wins.',
+    steps: [
+      ['Incident Manager sends an announcement to Mary', T({ origin: 'Incident Manager', title: 'Major incident INC-4821: multiple reports of failed card payments', actions: ['Join incident bridge'], users: ['mary'] })],
+      ['Mary dismisses it on their Mac', { type: 'dismiss', id: 'N1', machine: 'MAC-MARY', person: 'mary' }],
+      ['Mary switches on their Windows laptop', { type: 'power', machine: 'WIN-MARY', on: true }],
+      ['Mary logs in on Windows', { type: 'login', machine: 'WIN-MARY', person: 'mary' }],
+      ['Mary clicks "Join incident bridge" on Windows', { type: 'act', id: 'N1', machine: 'WIN-MARY', person: 'mary', label: 'Join incident bridge' }],
+    ],
+  },
+  {
+    name: 'Staged + group changes',
+    desc: 'Service Desk stages an info to Okta group support-all (Mary, John, Jane) for one hour from now. Before it activates, Peter joins the group and Jane leaves. <b>Watch</b> the audience being expanded only at activation: Peter is in and Jane is out. Then try to withdraw it after activation. That should be refused.',
+    steps: [
+      ['Service Desk stages an info to support-all, activating in 1 hour', T({ origin: 'Service Desk', ntype: 'info', title: 'Ticket queue migration at 10:00: expect a 5-minute pause', groups: ['support-all'], delay: 60, lifetime: 120 })],
+      ['Peter joins support-all', { type: 'join', group: 'support-all', person: 'peter' }],
+      ['Jane leaves support-all', { type: 'leave', group: 'support-all', person: 'jane' }],
+      ['One hour passes', { type: 'advance', minutes: 60 }],
+      ['Service Desk tries to withdraw it now', { type: 'withdraw', id: 'N1', origin: 'Service Desk' }],
+    ],
+  },
+  {
+    name: 'Withdrawn',
+    desc: 'Service Desk stages an announcement for tomorrow. Half an hour later a different origin, Workflow Engine, withdraws it using its identifier. <b>Watch</b> the notification show Withdrawn with the time and who did it, and nothing go out the next day. There are no recipients, because the audience is never expanded.',
+    steps: [
+      ['Service Desk stages an announcement for tomorrow 09:00', T({ origin: 'Service Desk', title: 'Shift handover moves to 08:30 from tomorrow', users: ['mary', 'john'], delay: 1440 })],
+      ['30 minutes pass', { type: 'advance', minutes: 30 }],
+      ['Workflow Engine withdraws it', { type: 'withdraw', id: 'N1', origin: 'Workflow Engine' }],
+      ['A day passes', { type: 'advance', minutes: 1440 }],
+    ],
+  },
+  {
+    name: 'Nobody reachable',
+    desc: 'An info with a 30-minute lifetime goes to support-all while Mary\'s Mac is locked, their Windows laptop is off, John\'s Mac has no network, and Peter is logged in on the shared machine John also uses. Jane has no machine at all. <b>Watch</b> each delivery fail at expiry with a different reason, and the Delivery Rate drop to 0%.',
+    steps: [
+      ['Mary locks their Mac', { type: 'lock', machine: 'MAC-MARY', on: true }],
+      ['John\'s Mac loses network', { type: 'network', machine: 'MAC-JOHN', on: false }],
+      ['Incident Manager sends an info to support-all (30 min lifetime)', T({ origin: 'Incident Manager', ntype: 'info', title: 'INC-4830: ticket spike for Login, check your queue', groups: ['support-all'], lifetime: 30 })],
+      ['31 minutes pass', { type: 'advance', minutes: 31 }],
+    ],
+  },
+  {
+    name: 'Do not disturb',
+    desc: 'Mary turns on do-not-disturb. An info and an announcement both arrive. <b>Watch</b> the info wait (Received, not on screen) while the announcement breaks through. When DND goes off, the info appears.',
+    steps: [
+      ['Mary turns on do-not-disturb', { type: 'dnd', machine: 'MAC-MARY', on: true }],
+      ['Service Desk sends an info to Mary', T({ origin: 'Service Desk', ntype: 'info', title: 'Knowledge article updated: refund workflow', users: ['mary'], lifetime: 120 })],
+      ['Incident Manager sends an announcement to Mary', T({ origin: 'Incident Manager', title: 'Major incident: email delivery down for all customers', users: ['mary'], lifetime: 120 })],
+      ['20 minutes pass', { type: 'advance', minutes: 20 }],
+      ['Mary turns do-not-disturb off', { type: 'dnd', machine: 'MAC-MARY', on: false }],
+    ],
+  },
+  {
+    name: 'Focus refused',
+    desc: 'Mary\'s Mac refuses to give the window focus. A task with a 10-minute lifetime arrives, so it is only <b>Displayed</b>. Expiry passes and it stays on screen. The next day Mary clicks its action. <b>Watch</b> it become Delivered and then Actioned <i>after</i> expiry, so the report keeps changing.',
+    steps: [
+      ['Mary\'s Mac starts refusing focus', { type: 'focus', machine: 'MAC-MARY', on: true }],
+      ['Learning Portal sends a task to Mary (10 min lifetime)', T({ origin: 'Learning Portal', ntype: 'task', title: 'Finish Data Handling training by 31 Oct', actions: ['Start training'], users: ['mary'], lifetime: 10 })],
+      ['A day passes', { type: 'advance', minutes: 1440 }],
+      ['Mary clicks "Start training"', { type: 'act', id: 'N1', machine: 'MAC-MARY', person: 'mary', label: 'Start training' }],
+    ],
+  },
+  {
+    name: 'Restart & re-show',
+    desc: 'An info is delivered to Mary\'s Mac. Mary restarts and logs back in, and it is shown again without a new status. After expiry Mary restarts again. <b>Watch</b> it not come back the second time: re-showing stops at expiry.',
+    steps: [
+      ['Service Desk sends an info to Mary (1 h lifetime)', T({ origin: 'Service Desk', ntype: 'info', title: 'Weekend on-call rota published', users: ['mary'], lifetime: 60 })],
+      ['Mary restarts their Mac', { type: 'restart', machine: 'MAC-MARY' }],
+      ['Mary logs back in', { type: 'login', machine: 'MAC-MARY', person: 'mary' }],
+      ['One hour passes', { type: 'advance', minutes: 60 }],
+      ['Mary restarts again', { type: 'restart', machine: 'MAC-MARY' }],
+      ['Mary logs back in', { type: 'login', machine: 'MAC-MARY', person: 'mary' }],
+    ],
+  },
+  {
+    name: 'Shared machine',
+    desc: 'John and Peter share WIN-SHARED, and Peter is logged in. An announcement goes to John, Peter and Mary. <b>Watch</b> only the logged-in person see it there. Then Mary logs in on WIN-SHARED for the first time. A Link is created, but Mary gets no delivery there, because deliveries are fixed at activation.',
+    steps: [
+      ['Incident Manager sends an announcement to John, Peter and Mary', T({ origin: 'Incident Manager', title: 'Multiple incidents reported: Payments and Login degraded', actions: ['Open status page'], users: ['john', 'peter', 'mary'] })],
+      ['Peter logs out of WIN-SHARED', { type: 'logout', machine: 'WIN-SHARED' }],
+      ['John logs in on WIN-SHARED', { type: 'login', machine: 'WIN-SHARED', person: 'john' }],
+      ['Mary logs in on WIN-SHARED', { type: 'login', machine: 'WIN-SHARED', person: 'mary' }],
+    ],
+  },
+];
+
+let state = Model.initialState();
+let walk = { idx: 0, progress: -1 };
+let registry = [];
+
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const btn = (label, action, cls = '') => { registry.push(action); return `<button class="${cls}" data-a="${registry.length - 1}">${esc(label)}</button>`; };
+const pct = (x) => x == null ? '—' : `${Math.round(x * 100)}%`;
+const dispatch = (a) => { state = Model.reduce(state, a); render(); };
+
+function renderWalk() {
+  const sc = SCENARIOS[walk.idx];
+  document.getElementById('walk').innerHTML = `
+    <div class="tabs">${SCENARIOS.map((x, i) => `<button data-tab="${i}" class="${i === walk.idx ? 'on' : ''}">${esc(x.name)}</button>`).join('')}</div>
+    <div>${sc.desc}</div>
+    <div style="margin-top:10px"><button class="primary" data-start="1">${walk.progress < 0 ? 'Start' : 'Restart'} this walkthrough</button></div>
+    <ol class="steps">${sc.steps.map(([label], i) => {
+      const cls = walk.progress < 0 ? '' : i < walk.progress ? 'done' : i === walk.progress ? 'next' : '';
+      return `<li class="${cls}"><button data-step="${i}" ${walk.progress !== i ? 'disabled' : ''}>${i + 1}. ${esc(label)}</button></li>`;
+    }).join('')}</ol>
+    ${walk.progress >= sc.steps.length ? '<p class="reason">Walkthrough complete. Keep poking with free play, or restart.</p>' : ''}`;
+}
+
+function renderState() {
+  registry = [];
+  const s = state;
+  const P = (p) => s.people[p];
+  let h = '';
+
+  h += `<div class="card changed"><b>What just happened</b>${s.rejected ? `<div class="rejected">✕ ${esc(s.rejected)}</div>` : ''}
+        ${s.changes.length ? `<ul>${s.changes.slice(-14).map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` : (!s.rejected ? '<div class="reason">Nothing yet. Start a walkthrough or trigger something.</div>' : '')}</div>`;
+
+  h += `<div class="card"><span class="reason">Now</span><div class="clock">${Model.fmtTime(s.now)}</div></div>`;
+
+  h += `<h2>Machines and what is on their screens</h2><div class="machines">`;
+  for (const [id, m] of Object.entries(s.machines)) {
+    const linked = s.links.filter(([, mm]) => mm === id).map(([p]) => P(p));
+    const windows = [];
+    for (const n of s.notifications) for (const d of n.deliveries) if (d.machine === id && d.onScreen) windows.push({ n, d });
+    h += `<div class="card machine"><h3>${id} <span class="pill">${m.os}</span></h3>
+      <div class="facts">
+        ${m.powered ? '<b>On</b>' : 'Off'} · network ${m.network ? 'up' : '<b>down</b>'} · ${Model.isConnected(m) ? '<b>Connected</b>' : 'not connected'}<br>
+        Logged in: <b>${m.user ? P(m.user) : 'nobody'}</b>${m.locked ? ' · <b>locked</b>' : ''}${m.dnd ? ' · <b>DND on</b>' : ''}${m.focusRefused ? ' · <b>OS refuses focus</b>' : ''}<br>
+        Linked people: ${linked.join(', ') || 'none'}
+      </div>
+      <div>
+        ${m.powered ? btn('Switch off', { type: 'power', machine: id, on: false }) : btn('Switch on', { type: 'power', machine: id, on: true })}
+        ${btn('Restart', { type: 'restart', machine: id })}
+        ${btn(m.network ? 'Lose network' : 'Restore network', { type: 'network', machine: id, on: !m.network })}
+      </div>
+      <div>
+        ${Object.keys(s.people).map((p) => m.user === p ? '' : btn(`Log in as ${P(p)}`, { type: 'login', machine: id, person: p })).join('')}
+        ${m.user ? btn('Log out', { type: 'logout', machine: id }) : ''}
+      </div>
+      <div>
+        ${btn(m.locked ? 'Unlock' : 'Lock', { type: 'lock', machine: id, on: !m.locked })}
+        ${btn(m.dnd ? 'DND off' : 'DND on', { type: 'dnd', machine: id, on: !m.dnd })}
+        ${btn(m.focusRefused ? 'Allow focus' : 'Refuse focus', { type: 'focus', machine: id, on: !m.focusRefused })}
+      </div>
+      ${windows.length ? windows.map(({ n, d }) => `<div class="window">
+          <div class="o">${esc(n.origin)} · ${n.ntype}</div>
+          <div class="t">${esc(n.title)}</div>
+          <div class="o">${n.id} for ${P(d.person)} · status <b>${d.status}</b></div>
+          <div style="margin-top:4px">
+            ${d.status === 'Displayed' ? btn('Click into window', { type: 'click', id: n.id, machine: id, person: d.person }) : ''}
+            ${n.actions.map((l) => btn(l, { type: 'act', id: n.id, machine: id, person: d.person, label: l })).join('')}
+            ${btn('Dismiss', { type: 'dismiss', id: n.id, machine: id, person: d.person })}
+          </div></div>`).join('') : '<div class="screen-empty">Nothing on screen.</div>'}
+    </div>`;
+  }
+  h += `</div>`;
+
+  h += `<h2>Okta groups</h2><div class="card groups">${Object.entries(s.groups).map(([g, ms]) => `<div style="margin:4px 0"><b>${g}</b>: ${ms.map(P).join(', ') || 'empty'}<br>
+     ${Object.keys(s.people).map((p) => ms.includes(p) ? btn(`${P(p)} leaves`, { type: 'leave', group: g, person: p }) : btn(`${P(p)} joins`, { type: 'join', group: g, person: p })).join('')}</div>`).join('')}
+     <div class="reason">Jane has no machine linked to them.</div></div>`;
+
+  h += `<h2>Notifications and their reports</h2>`;
+  if (!s.notifications.length) h += `<div class="card reason">No notifications yet.</div>`;
+  const wOrigin = document.getElementById('w-origin').value || 'Incident Manager';
+  for (const n of [...s.notifications].reverse()) {
+    const ph = Model.phase(s, n);
+    const r = Model.report(s, n);
+    h += `<div class="card notif"><h3>${n.id} · ${esc(n.title)} <span class="pill">${n.ntype}</span> <span class="pill">${ph}</span></h3>
+      <div class="facts">
+        From <b>${esc(n.origin)}</b> · triggered ${Model.fmtTime(n.triggeredAt)} · activation ${Model.fmtTime(n.activationAt)} · lifetime ${Model.fmtDur(n.lifetime)} · expiry ${Model.fmtTime(Model.expiryOf(n))}<br>
+        Audience: ${[...n.audience.users.map(P), ...n.audience.groups.map((g) => `group ${g}`)].join(', ')}
+        ${n.actions.length ? ` · Actions: ${n.actions.map(esc).join(', ')}` : ' · no actions'}
+        ${n.withdrawnAt != null ? `<br><b>Withdrawn</b> at ${Model.fmtTime(n.withdrawnAt)} by <b>${esc(n.withdrawnBy)}</b>` : ''}
+      </div>
+      ${ph === 'Staged' ? btn(`Withdraw (as ${wOrigin})`, { type: 'withdraw', id: n.id, origin: wOrigin }) : ''}
+      ${n.activatedAt != null ? `
+        <div class="metrics">
+          <div class="metric"><div class="v">${n.recipients.length}</div><div class="k">Recipients</div></div>
+          <div class="metric"><div class="v">${n.deliveries.length}</div><div class="k">Deliveries</div></div>
+          <div class="metric"><div class="v">${pct(r.deliveryRate)}</div><div class="k">Delivery rate</div></div>
+          <div class="metric"><div class="v">${pct(r.actionRate)}</div><div class="k">Action rate</div></div>
+          ${Model.RANK.filter((k) => r.counts[k]).map((k) => `<div class="metric"><div class="v">${r.counts[k]}</div><div class="k">${k}</div></div>`).join('')}
+        </div>
+        ${Object.keys(r.clicks).length ? `<div class="facts">Action clicks: ${Object.entries(r.clicks).map(([l, c]) => `"${esc(l)}" × ${c}`).join(', ')}</div>` : ''}
+        <div class="facts">${r.mayStillChange ? 'This report can still change.' : 'Nothing left that could change this report.'}</div>
+        <table><tr><th>Recipient</th><th>Outcome</th><th>Deliveries (one per linked machine)</th></tr>
+        ${r.recipients.map((x) => `<tr><td>${P(x.person)}</td><td><span class="status">${x.status}</span>${x.reason ? `<div class="reason">${esc(x.reason)}</div>` : ''}</td>
+          <td>${n.deliveries.filter((d) => d.person === x.person).map((d) => `<div><b>${d.machine}</b>: ${d.status}${d.onScreen ? ' <span class="pill">on screen</span>' : ''}${d.reason ? ` <span class="reason">(${esc(d.reason)})</span>` : ''}
+            <div class="reason">${d.history.map((hh) => `${hh.status} ${Model.fmtTime(hh.at)}`).join(' → ')}</div></div>`).join('') || '<span class="reason">none</span>'}</td></tr>`).join('')}
+        </table>` : ''}
+    </div>`;
+  }
+
+  h += `<h2>Event log</h2><div class="card log">${[...s.log].reverse().map((e) => `<div>${Model.fmtTime(e.at)} · ${esc(e.msg)}</div>`).join('') || 'Empty.'}</div>`;
+  document.getElementById('state').innerHTML = h;
+}
+
+function render() { renderWalk(); renderState(); }
+
+function setupForm() {
+  const s = Model.initialState();
+  for (const id of ['f-origin', 'w-origin']) document.getElementById(id).innerHTML = s.origins.map((o) => `<option>${o}</option>`).join('');
+  document.getElementById('f-users').innerHTML = Object.entries(s.people).map(([k, v]) => `<label><input type="checkbox" value="${k}" ${k === 'mary' ? 'checked' : ''}>${v}</label>`).join('');
+  document.getElementById('f-groups').innerHTML = Object.keys(s.groups).map((g) => `<label><input type="checkbox" value="${g}">${g}</label>`).join('');
+  document.getElementById('f-go').onclick = () => {
+    const val = (id) => document.getElementById(id).value;
+    const checked = (id) => [...document.querySelectorAll(`#${id} input:checked`)].map((i) => i.value);
+    dispatch(T({
+      origin: val('f-origin'), ntype: val('f-type'), title: val('f-title') || 'Untitled',
+      actions: val('f-actions').split(',').map((x) => x.trim()).filter(Boolean),
+      users: checked('f-users'), groups: checked('f-groups'),
+      delay: parseInt(val('f-delay'), 10) || 0, lifetime: parseInt(val('f-life'), 10),
+    }));
+  };
+  document.getElementById('w-origin').onchange = render;
+  document.getElementById('reset').onclick = () => { state = Model.initialState(); walk.progress = -1; render(); };
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.dataset.a != null) return dispatch(registry[+t.dataset.a]);
+  if (t.dataset.clock) return dispatch({ type: 'advance', minutes: +t.dataset.clock });
+  if (t.dataset.tab != null) { walk = { idx: +t.dataset.tab, progress: -1 }; return render(); }
+  if (t.dataset.start) { state = Model.initialState(); walk.progress = 0; return render(); }
+  if (t.dataset.step != null) {
+    const i = +t.dataset.step;
+    walk.progress = i + 1;
+    return dispatch(SCENARIOS[walk.idx].steps[i][1]);
+  }
+});
+
+setupForm();
+render();
+</script>
+</body>
+</html>
